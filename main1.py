@@ -61,10 +61,11 @@ parser.add_argument('--projection_hidden_size', type=int, default=64)
 parser.add_argument('--seed', type=int, default=123)
 args = parser.parse_args()
 
-layers = [1, 2, 3, 4, 5]
-hiddens = [16, 32, 64, 128]
+# layers = [1, 2, 3, 4, 5]
+# hiddens = [16, 32, 64, 128]
 # datasets = ['MUTAG', 'PROTEINS', 'IMDB-BINARY', 'REDDIT-BINARY']  # , 'COLLAB']
-datasets = ['PROTEINS', 'IMDB-BINARY', 'REDDIT-BINARY']  # , 'COLLAB']
+datasets = ['MUTAG', 'PTC_MR', 'IMDB-BINARY',
+            'IMDB-MULTI', 'COLLAB', 'NCI1']  # , 'COLLAB']
 # nets = [
 #     GCNWithJK,
 #     GraphSAGEWithJK,
@@ -85,6 +86,8 @@ datasets = ['PROTEINS', 'IMDB-BINARY', 'REDDIT-BINARY']  # , 'COLLAB']
 #     ASAP,
 # ]
 nets = [GASSL]
+PPs = ['H', 'X']
+GNNs = ['gin', 'gcn']
 
 
 def logger(info):
@@ -97,43 +100,48 @@ def logger(info):
 device = torch.device("cuda:" + str(args.device)
                       ) if torch.cuda.is_available() else torch.device("cpu")
 results = []
-for dataset_name, Net in product(datasets, nets):
+for dataset_name, Net, pp, gnn in product(datasets, nets, PPs, GNNs):
     best_result = (float('inf'), 0, 0)  # (loss, acc, std)
-    print(f'--\n{dataset_name} - {Net.__name__}')
-    for num_layers, hidden in product(layers, hiddens):
-        dataset = get_dataset(dataset_name, sparse=Net != False)
-        feat_dim = dataset.data.x.shape[-1]
-        if args.gnn == 'gin':
-            gnnmodel = GNN(gnn_type='gin', num_layer=args.num_layer, emb_dim=args.emb_dim,
-                           drop_ratio=args.drop_ratio, virtual_node=False, feat_dim=feat_dim, perturb_position=args.pp).to(device)
-        elif args.gnn == 'gcn':
-            gnnmodel = GNN(gnn_type='gcn', num_layer=args.num_layer, emb_dim=args.emb_dim,
-                           drop_ratio=args.drop_ratio, virtual_node=False, feat_dim=feat_dim, perturb_position=args.pp).to(device)
-        else:
-            raise ValueError('Invalid GNN type')
+    print(f'--\n{dataset_name} - {Net.__name__} - {pp} - {gnn}')
 
-        model = GASSL(gnnmodel, emb_dim=args.emb_dim, projection_size=args.projection_size,
-                      prediction_size=args.prediction_size, projection_hidden_size=args.projection_hidden_size,
-                      moving_average_decay=args.decay)
-        model.to(device)
-        loss, acc, std = cross_validation_with_val_set(
-            dataset,
-            model,
-            folds=10,
-            epochs=args.epochs,
-            batch_size=args.batch_size,
-            lr=args.lr,
-            lr_decay_factor=0.5,
-            lr_decay_step_size=50,
-            weight_decay=0,
-            args=args,
-            logger=None,
-        )
-        if loss < best_result[0]:
-            best_result = (loss, acc, std)
+    dataset = get_dataset(dataset_name, sparse=Net != False)
+    feat_dim = dataset.num_features
+    # if args.gnn == 'gin':
+    #     gnnmodel = GNN(gnn_type='gin', num_layer=args.num_layer, emb_dim=args.emb_dim,
+    #                    drop_ratio=args.drop_ratio, virtual_node=False, feat_dim=feat_dim, perturb_position=args.pp).to(device)
+    # elif args.gnn == 'gcn':
+    #     gnnmodel = GNN(gnn_type='gcn', num_layer=args.num_layer, emb_dim=args.emb_dim,
+    #                    drop_ratio=args.drop_ratio, virtual_node=False, feat_dim=feat_dim, perturb_position=args.pp).to(device)
+    # else:
+    #     raise ValueError('Invalid GNN type')
+    gnnmodel = GNN(gnn_type=gnn, num_layer=args.num_layer, emb_dim=args.emb_dim,
+                   drop_ratio=args.drop_ratio, virtual_node=False, feat_dim=feat_dim, perturb_position=pp).to(device)
+    model = GASSL(gnnmodel, emb_dim=args.emb_dim, projection_size=args.projection_size,
+                  prediction_size=args.prediction_size, projection_hidden_size=args.projection_hidden_size,
+                  moving_average_decay=args.decay)
+    model.to(device)
+    loss, acc, std = cross_validation_with_val_set(
+        dataset,
+        model,
+        dataset_name,
+        gnn,
+        pp,
 
-    desc = f'{best_result[1]:.3f} ± {best_result[2]:.3f}'
-    print(f'Best result - {desc}')
-    results += [f'{dataset_name} - {model}: {desc}']
-results = '\n'.join(results)
-print(f'--\n{results}')
+        folds=10,
+        epochs=args.epochs,
+        batch_size=args.batch_size,
+        lr=args.lr,
+        lr_decay_factor=0.5,
+        lr_decay_step_size=50,
+        weight_decay=0,
+        args=args,
+        logger=None,
+    )
+    # if loss < best_result[0]:
+    #     best_result = (loss, acc, std)
+
+#     desc = f'{best_result[1]:.3f} ± {best_result[2]:.3f}'
+#     print(f'Best result - {desc}')
+#     results += [f'{dataset_name} - {model}: {desc}']
+# results = '\n'.join(results)
+# print(f'--\n{results}')

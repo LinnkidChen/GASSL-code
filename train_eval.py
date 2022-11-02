@@ -12,73 +12,77 @@ from torch_geometric.loader import DenseDataLoader as DenseLoader
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-def cross_validation_with_val_set(dataset, model, folds, epochs, batch_size,
-                                  lr, lr_decay_factor, lr_decay_step_size,
-                                  weight_decay, args, logger=None):
+def cross_validation_with_val_set(dataset, model, dataset_name, gnn, pp, folds, epochs, batch_size, lr, lr_decay_factor, lr_decay_step_size, weight_decay, args, logger=None):
 
-    val_losses, accs, durations = [], [], []
-    for fold, (train_idx, test_idx,
-               val_idx) in enumerate(zip(*k_fold(dataset, folds))):
+    results, accs, durations = [], [], []
+    best_acc = -1
+    best_std = -1
+    # train_dataset = dataset[train_idx]
+    # test_dataset = dataset[test_idx]
+    # val_dataset = dataset[val_idx]
 
-        train_dataset = dataset[train_idx]
-        test_dataset = dataset[test_idx]
-        val_dataset = dataset[val_idx]
+    if 'adj' in dataset[0]:
+        train_loader = DenseLoader(dataset, batch_size, shuffle=True)
+        # val_loader = DenseLoader(val_dataset, batch_size, shuffle=False)
+        # test_loader = DenseLoader(test_dataset, batch_size, shuffle=False)
+    else:
+        train_loader = DataLoader(dataset, batch_size, shuffle=True)
+        # val_loader = DataLoader(val_dataset, batch_size, shuffle=False)
+        # test_loader = DataLoader(test_dataset, batch_size, shuffle=False)
 
-        if 'adj' in train_dataset[0]:
-            train_loader = DenseLoader(train_dataset, batch_size, shuffle=True)
-            val_loader = DenseLoader(val_dataset, batch_size, shuffle=False)
-            test_loader = DenseLoader(test_dataset, batch_size, shuffle=False)
-        else:
-            train_loader = DataLoader(train_dataset, batch_size, shuffle=True)
-            val_loader = DataLoader(val_dataset, batch_size, shuffle=False)
-            test_loader = DataLoader(test_dataset, batch_size, shuffle=False)
+    model.to(device).reset_parameters()
+    optimizer = Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
 
-        model.to(device).reset_parameters()
-        optimizer = Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
 
-        if torch.cuda.is_available():
-            torch.cuda.synchronize()
+    t_start = time.perf_counter()
 
-        t_start = time.perf_counter()
+    for epoch in range(1, epochs + 1):
+        train_loss = train(model, optimizer, train_loader, args)
+        # val_losses.append(eval_loss(model, val_loader))
+        # accs.append(eval_acc(model, train_loader))
+        eval_info = {
+            'epoch': epoch,
+            'train_loss': train_loss,
+            # 'val_loss': val_losses[-1],
+            'test_acc': accs[-1],
+        }
 
-        for epoch in range(1, epochs + 1):
-            train_loss = train(model, optimizer, train_loader, args)
-            # val_losses.append(eval_loss(model, val_loader))
-            accs.append(eval_acc(model, test_loader))
-            eval_info = {
-                'fold': fold,
-                'epoch': epoch,
-                'train_loss': train_loss,
-                # 'val_loss': val_losses[-1],
-                'test_acc': accs[-1],
-            }
+        if logger is not None:
+            logger(eval_info)
+        if epoch % args.test_freq == 0:
+            acc, std = eval(model, device, train_loader)
+            results.append([args.seed, epoch, acc, std])
+            if acc > best_acc:
+                best_acc, best_std = acc, std
+            print(
+                f'acc mean {acc:.5f}, std {std:.5f}, best acc mean {best_acc:.5f}, std {best_std:.5f}, loss {train_loss:.5f}')
+        if epoch % lr_decay_step_size == 0:
+            for param_group in optimizer.param_groups:
+                param_group['lr'] = lr_decay_factor * param_group['lr']
 
-            if logger is not None:
-                logger(eval_info)
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
 
-            if epoch % lr_decay_step_size == 0:
-                for param_group in optimizer.param_groups:
-                    param_group['lr'] = lr_decay_factor * param_group['lr']
+    t_end = time.perf_counter()
+    durations.append(t_end - t_start)
 
-        if torch.cuda.is_available():
-            torch.cuda.synchronize()
+    # loss, acc, duration = tensor(train_loss), tensor(accs), tensor(durations)
+    # loss, acc = loss.view(folds, epochs), acc.view(folds, epochs)
+    # loss, argmin = loss.min(dim=1)
+    # acc = acc[torch.arange(folds, dtype=torch.long), argmin]
 
-        t_end = time.perf_counter()
-        durations.append(t_end - t_start)
+    # loss_mean = loss.mean().item()
 
-    loss, acc, duration = tensor(val_losses), tensor(accs), tensor(durations)
-    loss, acc = loss.view(folds, epochs), acc.view(folds, epochs)
-    loss, argmin = loss.min(dim=1)
-    acc = acc[torch.arange(folds, dtype=torch.long), argmin]
+    # acc_mean = acc.mean().item()
+    # acc_std = acc.std().item()
+    # duration_mean = duration.mean().item()
+    print(f'{dataset_name} - {gnn} --{pp}:')
+    print(f' Test Accuracy: {best_acc:.3f} '
+          f'± {best_std:.3f}')
 
-    loss_mean = loss.mean().item()
-    acc_mean = acc.mean().item()
-    acc_std = acc.std().item()
-    duration_mean = duration.mean().item()
-    print(f'Val Loss: {loss_mean:.4f}, Test Accuracy: {acc_mean:.3f} '
-          f'± {acc_std:.3f}, Duration: {duration_mean:.3f}')
-
-    return loss_mean, acc_mean, acc_std
+    return best_acc, best_std
 
 
 def k_fold(dataset, folds):
