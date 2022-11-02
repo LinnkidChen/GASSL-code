@@ -3,7 +3,7 @@ import pkg_resources
 from gnn import GNN
 import argparse
 from itertools import product
-
+#python /root/GASSL_code/main1.py > run.log
 import torch
 import logging
 import torch
@@ -120,7 +120,7 @@ for dataset_name, Net, pp, gnn in product(datasets, nets, PPs, GNNs):
                   prediction_size=args.prediction_size, projection_hidden_size=args.projection_hidden_size,
                   moving_average_decay=args.decay)
     model.to(device)
-    loss, acc, std = cross_validation_with_val_set(
+    acc, std = cross_validation_with_val_set(
         dataset,
         model,
         dataset_name,

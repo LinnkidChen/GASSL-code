@@ -2,14 +2,55 @@ import time
 
 import torch
 import torch.nn.functional as F
-from sklearn.model_selection import StratifiedKFold
+
 from torch import tensor
+from sklearn.model_selection import GridSearchCV, StratifiedKFold
+
 from torch.optim import Adam
 
 from torch_geometric.loader import DataLoader
 from torch_geometric.loader import DenseDataLoader as DenseLoader
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+
+def eval(model, device, loader):
+    model.eval()
+    all_embed = []
+    y_true = []
+
+    for step, batch in enumerate(loader):
+        batch = batch.to(device)
+
+        if batch.x.shape[0] == 1:
+            pass
+        else:
+            with torch.no_grad():
+                batch_embed = model.embed(batch)
+                all_embed.append(batch_embed)
+                y_true.append(batch.y.detach().cpu())
+
+    all_embed = torch.cat(all_embed, dim=0)
+    y_true = torch.cat(y_true, dim=0)
+    x = all_embed.cpu().detach().numpy()
+    y = y_true.cpu().detach().numpy()
+
+    from sklearn.preprocessing import StandardScaler
+    scaler = StandardScaler()
+    x = scaler.fit_transform(x)
+    from sklearn.svm import LinearSVC
+    from sklearn.metrics import accuracy_score
+    params = {'C': [0.001, 0.01, 0.1, 1, 10, 100, 1000]}
+    kf = StratifiedKFold(n_splits=10, shuffle=True, random_state=None)
+    accuracies = []
+    for train_index, test_index in kf.split(x, y):
+        x_train, x_test = x[train_index], x[test_index]
+        y_train, y_test = y[train_index], y[test_index]
+        classifier = GridSearchCV(
+            LinearSVC(dual=False), params, cv=5, scoring='accuracy', verbose=0, n_jobs=-1)
+        classifier.fit(x_train, y_train)
+        accuracies.append(accuracy_score(y_test, classifier.predict(x_test)))
+    return (np.mean(accuracies), np.std(accuracies))
 
 
 def cross_validation_with_val_set(dataset, model, dataset_name, gnn, pp, folds, epochs, batch_size, lr, lr_decay_factor, lr_decay_step_size, weight_decay, args, logger=None):
@@ -42,15 +83,15 @@ def cross_validation_with_val_set(dataset, model, dataset_name, gnn, pp, folds, 
         train_loss = train(model, optimizer, train_loader, args)
         # val_losses.append(eval_loss(model, val_loader))
         # accs.append(eval_acc(model, train_loader))
-        eval_info = {
-            'epoch': epoch,
-            'train_loss': train_loss,
-            # 'val_loss': val_losses[-1],
-            'test_acc': accs[-1],
-        }
+        # eval_info = {
+        #     'epoch': epoch,
+        #     'train_loss': train_loss,
+        #     # 'val_loss': val_losses[-1],
+        #     'test_acc': accs[-1],
+        # }
 
-        if logger is not None:
-            logger(eval_info)
+        # if logger is not None:
+        #     logger(eval_info)
         if epoch % args.test_freq == 0:
             acc, std = eval(model, device, train_loader)
             results.append([args.seed, epoch, acc, std])
