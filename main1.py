@@ -3,7 +3,7 @@ import pkg_resources
 from gnn import GNN
 import argparse
 from itertools import product
-#python /root/GASSL_code/main1.py > run.log
+#python -u /root/GASSL-code/main1.py --test_freq 1 --epoch 2 > /root/GASSL-code/run1.log
 import torch
 import logging
 import torch
@@ -33,8 +33,8 @@ parser.add_argument('--decay', type=float, default=0.99,
                     help='moving_average_decay (default: 0.99)')
 parser.add_argument('--num_layer', type=int, default=2,
                     help='number of GNN message passing layers (default: 5)')
-parser.add_argument('--emb_dim', type=int, default=512,
-                    help='dimensionality of hidden units in GNNs (default: 300)')
+parser.add_argument('--emb_dim', type=int, default=128,
+                    help='dimensionality of hidden units in GNNs (default: 128)')
 parser.add_argument('--batch_size', type=int, default=32,
                     help='input batch size for training (default: 32)')
 parser.add_argument('--epochs', type=int, default=100,
@@ -67,7 +67,7 @@ args = parser.parse_args()
 # datasets = ['MUTAG', 'PTC_MR', 'IMDB-BINARY',
 #             'IMDB-MULTI', 'COLLAB', 'NCI1']  # , 'COLLAB']
 datasets = ['COLLAB']
-datasets = ['NCI1']
+
 # nets = [
 #     GCNWithJK,
 #     GraphSAGEWithJK,
@@ -90,7 +90,7 @@ datasets = ['NCI1']
 nets = [GASSL]
 PPs = ['H', 'X']
 GNNs = ['gin', 'gcn']
-
+num_layers=[2,3,4,5]
 
 def logger(info):
     fold, epoch = info['fold'] + 1, info['epoch']
@@ -102,7 +102,7 @@ def logger(info):
 device = torch.device("cuda:" + str(args.device)
                       ) if torch.cuda.is_available() else torch.device("cpu")
 results = []
-for dataset_name, Net, pp, gnn in product(datasets, nets, PPs, GNNs):
+for dataset_name, Net, pp, gnn,num_layer in product(datasets, nets, PPs, GNNs,num_layers):
     best_result = (float('inf'), 0, 0)  # (loss, acc, std)
     print(f'--\n{dataset_name} - {Net.__name__} - {pp} - {gnn}')
 
@@ -116,7 +116,7 @@ for dataset_name, Net, pp, gnn in product(datasets, nets, PPs, GNNs):
     #                    drop_ratio=args.drop_ratio, virtual_node=False, feat_dim=feat_dim, perturb_position=args.pp).to(device)
     # else:
     #     raise ValueError('Invalid GNN type')
-    gnnmodel = GNN(gnn_type=gnn, num_layer=args.num_layer, emb_dim=args.emb_dim,
+    gnnmodel = GNN(gnn_type=gnn, num_layer=num_layer, emb_dim=args.emb_dim,
                    drop_ratio=args.drop_ratio, virtual_node=False, feat_dim=feat_dim, perturb_position=pp).to(device)
     model = GASSL(gnnmodel, emb_dim=args.emb_dim, projection_size=args.projection_size,
                   prediction_size=args.prediction_size, projection_hidden_size=args.projection_hidden_size,
@@ -128,7 +128,7 @@ for dataset_name, Net, pp, gnn in product(datasets, nets, PPs, GNNs):
         dataset_name,
         gnn,
         pp,
-
+        num_layer,
         folds=10,
         epochs=args.epochs,
         batch_size=args.batch_size,
