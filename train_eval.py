@@ -53,7 +53,7 @@ def eval(model, device, loader):
     return (np.mean(accuracies), np.std(accuracies))
 
 
-def cross_validation_with_val_set(dataset, model, dataset_name, gnn, pp,num_layer, folds, epochs, batch_size, lr, lr_decay_factor, lr_decay_step_size, weight_decay, args, logger=None):
+def cross_validation_with_val_set(dataset, model, dataset_name, gnn, pp, num_layer, folds, epochs, batch_size, lr, lr_decay_factor, lr_decay_step_size, weight_decay, args, logger=None):
 
     results, accs, durations = [], [], []
     best_acc = -1
@@ -63,11 +63,14 @@ def cross_validation_with_val_set(dataset, model, dataset_name, gnn, pp,num_laye
     # val_dataset = dataset[val_idx]
 
     if 'adj' in dataset[0]:
-        train_loader = DenseLoader(dataset, batch_size, shuffle=True)
+        train_loader = DenseLoader(
+            dataset, batch_size, shuffle=True, pin_memory=True)
         # val_loader = DenseLoader(val_dataset, batch_size, shuffle=False)
         # test_loader = DenseLoader(test_dataset, batch_size, shuffle=False)
     else:
-        train_loader = DataLoader(dataset, batch_size, shuffle=True)
+        train_loader = DataLoader(
+            dataset, batch_size, shuffle=True, pin_memory=True)
+        #   cpu high load gpu low
         # val_loader = DataLoader(val_dataset, batch_size, shuffle=False)
         # test_loader = DataLoader(test_dataset, batch_size, shuffle=False)
 
@@ -119,7 +122,8 @@ def cross_validation_with_val_set(dataset, model, dataset_name, gnn, pp,num_laye
     # acc_mean = acc.mean().item()
     # acc_std = acc.std().item()
     # duration_mean = duration.mean().item()
-    print(f'{dataset_name} - {gnn} --{pp} --numLayer:{num_layer}:')
+
+    print(f'{dataset_name}-{gnn}-{pp}-numlayer:{num_layer}-batchsize:{batch_size}-epoch:{epoch}')
     print(f' Test Accuracy: {best_acc:.3f} '
           f'± {best_std:.3f}')
 
