@@ -4,6 +4,7 @@ from gnn import GNN
 import argparse
 from itertools import product
 # python -u /root/GASSL-code/main1.py --test_freq 1 --epoch 2 > /root/GASSL-code/run1.log
+# python -u /root/GASSL-code/main1.py --test_freq 1 --epoch 2 > /root/GASSL-code/run1.log
 import torch
 import logging
 import torch
@@ -143,6 +144,8 @@ for dataset_name, Net, pp, gnn, num_layer, batch_size, epoch, perb_gen in produc
         num_layer,
         perb_gen,
         folds=10,
+        epochs=epoch,
+        batch_size=batch_size,
         epochs=epoch,
         batch_size=batch_size,
         lr=args.lr,
