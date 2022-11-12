@@ -11,7 +11,8 @@ from torch.optim import Adam
 from torch_geometric.loader import DataLoader
 from torch_geometric.loader import DenseDataLoader as DenseLoader
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = torch.device("cuda:" + str(0)
+                      )
 
 
 def eval(model, device, loader):
@@ -53,7 +54,7 @@ def eval(model, device, loader):
     return (np.mean(accuracies), np.std(accuracies))
 
 
-def cross_validation_with_val_set(dataset, model, dataset_name, gnn, pp,num_layer, folds, epochs, batch_size, lr, lr_decay_factor, lr_decay_step_size, weight_decay, args, logger=None):
+def cross_validation_with_val_set(dataset, model, dataset_name, gnn, pp, num_layer, perb_gen, folds, epochs, batch_size, lr, lr_decay_factor, lr_decay_step_size, weight_decay, args, logger=None):
 
     results, accs, durations = [], [], []
     best_acc = -1
@@ -63,11 +64,14 @@ def cross_validation_with_val_set(dataset, model, dataset_name, gnn, pp,num_laye
     # val_dataset = dataset[val_idx]
 
     if 'adj' in dataset[0]:
-        train_loader = DenseLoader(dataset, batch_size, shuffle=True)
+        train_loader = DenseLoader(
+            dataset, batch_size, shuffle=True, pin_memory=True)
         # val_loader = DenseLoader(val_dataset, batch_size, shuffle=False)
         # test_loader = DenseLoader(test_dataset, batch_size, shuffle=False)
     else:
-        train_loader = DataLoader(dataset, batch_size, shuffle=True)
+        train_loader = DataLoader(
+            dataset, batch_size, shuffle=True, pin_memory=True)
+        #   cpu high load gpu low
         # val_loader = DataLoader(val_dataset, batch_size, shuffle=False)
         # test_loader = DataLoader(test_dataset, batch_size, shuffle=False)
 
@@ -80,7 +84,7 @@ def cross_validation_with_val_set(dataset, model, dataset_name, gnn, pp,num_laye
     t_start = time.perf_counter()
 
     for epoch in range(1, epochs + 1):
-        train_loss = train(model, optimizer, train_loader, args)
+        train_loss = train(model, optimizer, train_loader, perb_gen, args)
         # val_losses.append(eval_loss(model, val_loader))
         # accs.append(eval_acc(model, train_loader))
         # eval_info = {
@@ -119,7 +123,8 @@ def cross_validation_with_val_set(dataset, model, dataset_name, gnn, pp,num_laye
     # acc_mean = acc.mean().item()
     # acc_std = acc.std().item()
     # duration_mean = duration.mean().item()
-    print(f'{dataset_name} - {gnn} --{pp} --numLayer:{num_layer}:')
+
+    print(f'{dataset_name}-{gnn}-{pp}-perb_gen {perb_gen}-numlayer:{num_layer}-batchsize:{batch_size}-epoch:{epoch}')
     print(f' Test Accuracy: {best_acc:.3f} '
           f'± {best_std:.3f}')
 
@@ -165,7 +170,7 @@ def num_graphs(data):
 #         optimizer.step()
 #     return total_loss / len(loader.dataset)
 
-def train1(model, device, loader, optimizer, args):
+def train1(model, device, loader, perbgen, optimizer, args):
     total_loss = 0
     for step, batch in enumerate(loader):
         batch = batch.to(device)
@@ -185,8 +190,20 @@ def train1(model, device, loader, optimizer, args):
 
             for _ in range(args.m - 1):
                 loss.backward()
-                perturb_data = perturb.detach() + args.step_size * \
-                    torch.sign(perturb.grad.detach())
+                if perbgen == "org":
+                    perturb_data = perturb.detach() + args.step_size * \
+                        torch.sign(perturb.grad.detach())
+
+                elif perbgen == "rand":
+                    perturb_data = (torch.rand(perturb_shape)
+                                    * args.delta).to(device)
+                elif perbgen == "normal":
+                    perturb_data = torch.normal(
+                        mean=0, std=args.delta, size=perturb_shape).to(device)
+                else:
+                    raise NameError("Invalid perb_gen name" + perbgen)
+                # perturb.to(device)
+                # perturb.requires_grad_()
                 perturb.data = perturb_data.data
                 perturb.grad[:] = 0
 
@@ -201,8 +218,8 @@ def train1(model, device, loader, optimizer, args):
     return total_loss / len(loader)
 
 
-def train(model, optimizer, loader, args):
-    loss = train1(model, "cuda:0", loader, optimizer, args)
+def train(model, optimizer, loader, perb_gen, args):
+    loss = train1(model, "cuda:0", loader, perb_gen, optimizer, args)
     return loss
 
 

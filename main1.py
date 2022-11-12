@@ -3,7 +3,7 @@ import pkg_resources
 from gnn import GNN
 import argparse
 from itertools import product
-#python -u /root/GASSL-code/main1.py --test_freq 1 --epoch 2 > /root/GASSL-code/run1.log
+# python -u /root/GASSL-code/main1.py --test_freq 1 --epoch 2 > /root/GASSL-code/run1.log
 import torch
 import logging
 import torch
@@ -53,7 +53,7 @@ parser.add_argument('--runs', type=int, default=1)
 parser.add_argument('--step-size', type=float, default=8e-3)
 parser.add_argument('--delta', type=float, default=8e-3)
 parser.add_argument('--m', type=int, default=3)
-parser.add_argument('--test_freq', type=int, default=10)
+parser.add_argument('--test_freq', type=int, default=20)
 parser.add_argument('--num_tasks', type=int, default=512)
 parser.add_argument('--projection_size', type=int, default=512)
 parser.add_argument('--prediction_size', type=int, default=512)
@@ -64,9 +64,7 @@ args = parser.parse_args()
 # layers = [1, 2, 3, 4, 5]
 # hiddens = [16, 32, 64, 128]
 # datasets = ['MUTAG', 'PROTEINS', 'IMDB-BINARY', 'REDDIT-BINARY']  # , 'COLLAB']
-# datasets = ['MUTAG', 'PTC_MR', 'IMDB-BINARY',
-#             'IMDB-MULTI', 'COLLAB', 'NCI1']  # , 'COLLAB']
-datasets = ['COLLAB']
+# , 'COLLAB']
 
 # nets = [
 #     GCNWithJK,
@@ -87,10 +85,22 @@ datasets = ['COLLAB']
 #     SortPool,
 #     ASAP,
 # ]
+# datasets = ['MUTAG', 'PTC_MR', 'IMDB-BINARY',
+#             'IMDB-MULTI',
+#             'COLLAB',
+#             'NCI1']
+datasets = ['NCI1', 'PTC_MR', 'IMDB-BINARY']
 nets = [GASSL]
 PPs = ['H', 'X']
 GNNs = ['gin', 'gcn']
-num_layers=[2,3,4,5]
+num_layers = [2, 5]
+epochs = [100, 200]
+batch_sizes = [64]
+path = '/root/GASSL-code/mylog_mod_NCI_PTC_IMDB-B.log'
+log = open(path, 'a+')
+perb_gens = ["org", "rand", "normal"]  # 原始 均匀分布 高斯分布
+# perb_gens = ["rand"]  # 原始 均匀分布 高斯分布
+
 
 def logger(info):
     fold, epoch = info['fold'] + 1, info['epoch']
@@ -102,9 +112,11 @@ def logger(info):
 device = torch.device("cuda:" + str(args.device)
                       ) if torch.cuda.is_available() else torch.device("cpu")
 results = []
-for dataset_name, Net, pp, gnn,num_layer in product(datasets, nets, PPs, GNNs,num_layers):
+for dataset_name, Net, pp, gnn, num_layer, batch_size, epoch, perb_gen in product(datasets, nets, PPs, GNNs, num_layers, batch_sizes, epochs, perb_gens):
     best_result = (float('inf'), 0, 0)  # (loss, acc, std)
-    print(f'--\n{dataset_name} - {Net.__name__} - {pp} - {gnn}')
+    if dataset_name == "IMDB-MULTI":
+        batch_size = 256
+    print(f'--\n{dataset_name} - {Net.__name__} - {pp} - {gnn}-{perb_gen}')
 
     dataset = get_dataset(dataset_name, sparse=Net != False)
     feat_dim = dataset.num_features
@@ -129,9 +141,10 @@ for dataset_name, Net, pp, gnn,num_layer in product(datasets, nets, PPs, GNNs,nu
         gnn,
         pp,
         num_layer,
+        perb_gen,
         folds=10,
-        epochs=args.epochs,
-        batch_size=args.batch_size,
+        epochs=epoch,
+        batch_size=batch_size,
         lr=args.lr,
         lr_decay_factor=0.5,
         lr_decay_step_size=50,
@@ -139,6 +152,8 @@ for dataset_name, Net, pp, gnn,num_layer in product(datasets, nets, PPs, GNNs,nu
         args=args,
         logger=None,
     )
+    log.write(f'{dataset_name}-{gnn}-{pp}-numlayer:{num_layer}-batchsize:{batch_size}-epoch:{epoch}:\naccuracie:{acc:.4f} std:{std:.4f}\n')
+
     # if loss < best_result[0]:
     #     best_result = (loss, acc, std)
 
