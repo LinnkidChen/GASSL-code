@@ -81,6 +81,7 @@ def train(model, device, loader, optimizer, args):
             model.train()
             optimizer.zero_grad()
             perturb_shape = (batch.x.shape[0], args.emb_dim)
+            # 均匀分布
             perturb = torch.FloatTensor(
                 *perturb_shape).uniform_(-args.delta, args.delta).to(device)
             perturb.requires_grad_()
