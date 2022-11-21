@@ -21,7 +21,7 @@ class NormalizedDegree(object):
 
 def get_dataset(name, sparse=True, cleaned=False):
     # path = osp.join(osp.dirname(osp.realpath(__file__)), '..', 'data', name)
-    path = '/root/autodl-tmp/data'
+    path = './datasets/'
     # dataset = TUDataset(path, name, cleaned=cleaned)
     dataset = TUDataset(path, name, cleaned=cleaned)
     dataset.data.edge_attr = None

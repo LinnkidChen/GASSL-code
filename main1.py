@@ -65,10 +65,14 @@ args = parser.parse_args()
 # layers = [1, 2, 3, 4, 5]
 # hiddens = [16, 32, 64, 128]
 # datasets = ['MUTAG', 'PROTEINS', 'IMDB-BINARY', 'REDDIT-BINARY']  # , 'COLLAB']
-datasets = ['MUTAG', 'PTC_MR', 'IMDB-BINARY',
-            'IMDB-MULTI',
-            'COLLAB',
-            'NCI1']  # , 'COLLAB']
+# datasets = ['MUTAG', 'PTC_MR', 'IMDB-BINARY',
+#             'IMDB-MULTI',
+#             'COLLAB',
+#             'NCI1']  # , 'COLLAB']
+datasets=['PTC_MR', 'IMDB-BINARY','IMDB-MULTI']
+#             'COLLAB',
+#             'NCI1'
+
 
 # nets = [
 #     GCNWithJK,
@@ -93,15 +97,17 @@ datasets = ['MUTAG', 'PTC_MR', 'IMDB-BINARY',
 #             'IMDB-MULTI',
 #             'COLLAB',
 #             'NCI1']
-datasets = ['NCI1', 'PTC_MR', 'IMDB-BINARY']
+
 nets = [GASSL]
 PPs = ['H', 'X']
 GNNs = ['gin', 'gcn']
-num_layers = [2, 5]
+num_layers = [2,3,4,5]
 epochs = [100, 200]
 batch_sizes = [64]
-path = '/root/GASSL-code/mylog_mod_NCI_PTC_IMDB-B.log'
+path = './results/testresult.log'
+bestResult_path='./results/bestResult.log'
 log = open(path, 'a+')
+best_log = open(bestResult_path, 'a+')
 perb_gens = ["org", "rand", "normal"]  # 原始 均匀分布 高斯分布
 # perb_gens = ["rand"]  # 原始 均匀分布 高斯分布
 
@@ -116,55 +122,58 @@ def logger(info):
 device = torch.device("cuda:" + str(args.device)
                       ) if torch.cuda.is_available() else torch.device("cpu")
 results = []
-for dataset_name, Net, pp, gnn, num_layer, batch_size, epoch, perb_gen in product(datasets, nets, PPs, GNNs, num_layers, batch_sizes, epochs, perb_gens):
-    best_result = (float('inf'), 0, 0)  # (loss, acc, std)
-    if dataset_name == "IMDB-MULTI":
-        batch_size = 256
-    print(f'--\n{dataset_name} - {Net.__name__} - {pp} - {gnn}-{perb_gen}')
+batch_size=64
+epoch=100
+for dataset_name, Net, pp, gnn,  perb_gen in product(datasets, nets, PPs, GNNs, perb_gens):
+    for num_layer in num_layers:
+        
+        best_result = (3,3)  # (loss, acc, std)
+        if dataset_name == "IMDB-MULTI":
+            batch_size = 256
+        print(f'--\n{dataset_name} - {Net.__name__} - {pp} - {gnn}-{perb_gen}-{num_layer}')
 
-    dataset = get_dataset(dataset_name, sparse=Net != False)
-    feat_dim = dataset.num_features
-    # if args.gnn == 'gin':
-    #     gnnmodel = GNN(gnn_type='gin', num_layer=args.num_layer, emb_dim=args.emb_dim,
-    #                    drop_ratio=args.drop_ratio, virtual_node=False, feat_dim=feat_dim, perturb_position=args.pp).to(device)
-    # elif args.gnn == 'gcn':
-    #     gnnmodel = GNN(gnn_type='gcn', num_layer=args.num_layer, emb_dim=args.emb_dim,
-    #                    drop_ratio=args.drop_ratio, virtual_node=False, feat_dim=feat_dim, perturb_position=args.pp).to(device)
-    # else:
-    #     raise ValueError('Invalid GNN type')
-    gnnmodel = GNN(gnn_type=gnn, num_layer=num_layer, emb_dim=args.emb_dim,
-                   drop_ratio=args.drop_ratio, virtual_node=False, feat_dim=feat_dim, perturb_position=pp).to(device)
-    model = GASSL(gnnmodel, emb_dim=args.emb_dim, projection_size=args.projection_size,
-                  prediction_size=args.prediction_size, projection_hidden_size=args.projection_hidden_size,
-                  moving_average_decay=args.decay)
-    model.to(device)
-    acc, std = cross_validation_with_val_set(
-        dataset,
-        model,
-        dataset_name,
-        gnn,
-        pp,
-        num_layer,
-        perb_gen,
-        folds=10,
-        epochs=epoch,
-        batch_size=batch_size,
-        epochs=epoch,
-        batch_size=batch_size,
-        lr=args.lr,
-        lr_decay_factor=0.5,
-        lr_decay_step_size=50,
-        weight_decay=0,
-        args=args,
-        logger=None,
-    )
-    log.write(f'{dataset_name}-{gnn}-{pp}-numlayer:{num_layer}-batchsize:{batch_size}-epoch:{epoch}:\naccuracie:{acc:.4f} std:{std:.4f}\n')
+        dataset = get_dataset(dataset_name, sparse=Net != False)
+        feat_dim = dataset.num_features
+        # if args.gnn == 'gin':
+        #     gnnmodel = GNN(gnn_type='gin', num_layer=args.num_layer, emb_dim=args.emb_dim,
+        #                    drop_ratio=args.drop_ratio, virtual_node=False, feat_dim=feat_dim, perturb_position=args.pp).to(device)
+        # elif args.gnn == 'gcn':
+        #     gnnmodel = GNN(gnn_type='gcn', num_layer=args.num_layer, emb_dim=args.emb_dim,
+        #                    drop_ratio=args.drop_ratio, virtual_node=False, feat_dim=feat_dim, perturb_position=args.pp).to(device)
+        # else:
+        #     raise ValueError('Invalid GNN type')
+        gnnmodel = GNN(gnn_type=gnn, num_layer=num_layer, emb_dim=args.emb_dim,
+                    drop_ratio=args.drop_ratio, virtual_node=False, feat_dim=feat_dim, perturb_position=pp).to(device)
+        model = GASSL(gnnmodel, emb_dim=args.emb_dim, projection_size=args.projection_size,
+                    prediction_size=args.prediction_size, projection_hidden_size=args.projection_hidden_size,
+                    moving_average_decay=args.decay)
+        model.to(device)
+        acc, std = cross_validation_with_val_set(
+            dataset,
+            model,
+            dataset_name,
+            gnn,
+            pp,
+            num_layer,
+            perb_gen,
+            folds=10,
+            epochs=epoch,
+            batch_size=batch_size,
+            lr=args.lr,
+            lr_decay_factor=0.5,
+            lr_decay_step_size=50,
+            weight_decay=0,
+            args=args,
+            logger=None,
+        )
+        log.write(f'{dataset_name}-{gnn}-{pp}-numlayer:{num_layer}-batchsize:{batch_size}-epoch:{epoch}:\naccuracie:{acc:.4f} std:{std:.4f}\n')
+        
+        if(best_result[0]<acc or(best_result[0]==acc and best_result[1]<std)):
+            best_result=(acc,std)
+    best_log.write(f'\n{dataset_name}-{Net.__name__}-{pp}-{gnn}-{perb_gen}-{num_layer}-acc:{best_result[0]}-std:{best_result[1]}')
 
-    # if loss < best_result[0]:
-    #     best_result = (loss, acc, std)
-
-#     desc = f'{best_result[1]:.3f} ± {best_result[2]:.3f}'
-#     print(f'Best result - {desc}')
-#     results += [f'{dataset_name} - {model}: {desc}']
+    #     desc = f'{best_result[1]:.3f} ± {best_result[2]:.3f}'
+    #     print(f'Best result - {desc}')
+    #     results += [f'{dataset_name} - {model}: {desc}']
 # results = '\n'.join(results)
 # print(f'--\n{results}')
